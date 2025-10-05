@@ -17,10 +17,10 @@ tail -n +2 $1 > $1.tmp
 sed -i s/"\\\n"// $1.tmp
 
 # Remove percentage sign to store data as numeric
-sed -i s/"%"//g $1.tmp
+#sed -i s/"%"//g $1.tmp
 
 # Handle null values. "NA"not accepted for numeric fields
-sed -i s/NA/null/g $1.tmp
+#sed -i s/NA/null/g $1.tmp
 
 # Make sure tmp file is empty
 echo "" > report-tmp.csv

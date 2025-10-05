@@ -1,14 +1,16 @@
 #!/bin/bash
 #
-# Script to parse a CSV formatted metadata file
-# and enter relevant data to DB
+# Script to parse an Excel or CSV formatted metadata file
+# and enter relevant data to DB.
+#
+# Optionally the script will run the analysis pipeline
+# and add the results to the DB.
 #
 # Syntax:
 # icli-run -p -m -r -f metadata.csv
 #
 # Options:
 # -p	Pipeline. Run the pipeline
-# -d    Duplicate. Run even if sample exists
 # -m	Metadata. Write metadata to DB
 # -r    Reports. Write analysis results and reports to DB
 # -f	Metadata file
@@ -19,28 +21,31 @@
 # If specified -r overrides the setting in metadata file.
 # If omitted, the matadata tag is obeyed.
 #
+# Expects following system variables to be set:
+# ALLOWED	    Path to the allowed terms list files
+# DBUSER      DB username
+# DBPASSWORD	DB password
+
 
 if [ $# -eq 0 ]; then
-    >&2 echo "Usage: icli-run -p -d -m -r -f metadata.csv"
+    >&2 echo "Usage: icli-run -p -d -m -r -i -f metadata.csv"
     >&2 echo ""
     >&2 echo "Options:"
-    >&2 echo "  -p    Pipeline. Run the pipeline"
-    >&2 echo "  -d    Duplicate. Run even if sample already exists."
-    >&2 echo "        Sample metadata is not changed. Reports handled"
-    >&2 echo "        as indicated by other options"
-    >&2 echo "  -m    Metadata. Write metadata to DB"
-    >&2 echo "  -r    Reports. Write analysis results and reports to DB"
-    >&2 echo "  -f    Metadata file"
+    >&2 echo "  -p        Pipeline. Run the pipeline"
+    >&2 echo "  -d        Duplicate. Run even if sample exists"
+    >&2 echo "  -m        Metadata. Write metadata to DB"
+    >&2 echo "  -r        Reports. Write analysis results and reports to DB"
+    >&2 echo "  -f  file  Metadata file (CSV or XLSX)"
     >&2 echo ""
     >&2 echo "If specified -r overrides the setting in metadata file"
     >&2 echo "If omitted, the matadata tag is obeyed."
+    >&2 echo ""
+    >&2 echo "If s"
 
     exit 1
 fi
 
-
 pipeline=false
-duplicate=false
 metadata=false
 reports=false
 
@@ -48,45 +53,343 @@ while getopts pdrmf: flag
 do
    case "${flag}" in
       p) pipeline=true;;
-      d) duplicate=true;;
+      d) duplicat=true;;
       r) reports=true;;
       m) metadata=true;;
-      f) file=${OPTARG};;
+      f) rawfile=${OPTARG};;
    esac
 done
 
-# Variables set by system in production version
-export ALLOWED=/mnt/singularity_cache2/InnuendoCli/db
-export DBPASSWORD="dbuser"
-
+# Variables set by system
+dbuser=$DBUSER
 dbpassword=$DBPASSWORD
 
-
-# Function to clean up and exit gracefully
+# Function definitons
 #
+# Clean stop if a problem is encountered (e.g with metadata file)
 abort_start () {
-  >&2 echo "Aborting. Check the CSV and try again."
+  echo "Aborting. Check the CSV and try again."
   exit
 }
 
-# Check if current user has bee added to DB
-userid=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT user_id FROM users WHERE username='$USER';")
+# Add metadata to DB
+add_metada () {
+  # Sample not yet in DB. Add sample metadata
+  echo "Adding sample to DB"
+  samples_values=()
+
+  # Fields going to table samples
+  #
+  # Column 1: pipeline species (compulsory, set terms)
+  unset allowed
+  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-pipeline_species
+  if [ -n "${array[0]}" ]
+  then
+    if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[0]}"'|') ]]
+    then
+    samples_values+="${array[0]}"
+    samples_fields="pipeline_species"
+    else
+      echo "Value "${array[0]}" not in list of allowed terms. Aborting."
+      abort_start
+    fi
+  else
+    echo "Pipeline-Species is compulsory field"
+    abort_start
+  fi
+
+  # Column 2: primary_identifier (compulsory)
+  if [ -n "${array[1]}" ]
+  then
+    samples_values+="${array[1]}"
+    samples_fields+=", primary_identifier"
+  else
+    echo "Primary-Identifier is compulsory field"
+    abort_start
+  fi
+
+  # Column 3:  RYMY-ID (optional)
+  if [ -n "${array[2]}" ]
+  then
+    samples_values+="RYMY-ID"
+    samples_values+="${array[2]}"
+    samples_fields+=", case_id_type, case_id"
+  fi
+  # Column 4: Food_bug (optional)
+  if [ -n "${array[3]}" ]
+  then
+    samples_values+="Food_bug"
+    samples_values+="${array[3]}"
+    samples_fields+=", casse_id_type, case_id"
+  fi
+
+  # Column 5: Source (compulsory, set terms)
+  unset allowed
+  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-source
+  if [ -n "${array[4]}" ]
+  sourceterm=$(echo "${array[4]}" | tr -d '[:blank:]')
+  then
+    if [[ $(echo ${allowed[@]} | fgrep -w '|'"${sourceterm}"'|') ]];
+    then
+        unset source
+        IFS=',' read -r -a source <<<"${sourceterm}"
+        samples_values+="${source[0]}"
+        samples_fields+=", source_category"
+        if [ -n "${source[1]}" ]
+        then
+          samples_values+="${source[1]}"
+          samples_fields+=", source_species"
+        fi
+      else
+        echo "Value "${array[4]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    else
+      echo "Source is compulsory field"
+      abort_start
+    fi
+
+    # Column 6: Sampling reason (optional, set terms)
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-sampling_reason
+    if [ -n "${array[5]}" ]
+    then
+      if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[5]}"'|') ]]
+      then
+        samples_values+="${array[5]}"
+        samples_fields+=", sampling_reason"
+      else
+        echo "Value "${array[5]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    fi
+
+    # Columns 7-8: Sampling-Date, Sample-Received-Date (conditionally optional)
+    if [[ -n "${array[6]}"  ||  -n "${array[7]}" ]]
+      then
+      if [ -n "${array[6]}" ]
+      then
+        unset date
+        IFS='-' read -r -a date <<<"${array[6]}"
+        samples_values+=${date[0]}
+        samples_values+=${date[1]}
+        samples_values+=${date[2]}
+        samples_fields+=", sampling_date_year, sampling_date_month, sampling_date_day"
+      fi
+      if [ -n "${array[7]}" ]
+      then
+        unset date
+        IFS='-' read -r -a date <<<"${array[7]}"
+        samples_values+=${date[0]}
+        samples_values+=${date[1]}
+        samples_values+=${date[2]}
+        samples_fields+=", sample_received_date_year, sample_received_date_month, sample_received_date_day"
+      fi
+    else
+      echo "Either Sampling-Date or Sample-Received-Date must be defined"
+      abort_start
+    fi
+
+    # Column 9: Owner-Collection (compulsory, set terms)
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-owner_collection
+    if [ -n "${array[8]}" ]
+    then
+      if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[8]}"'|') ]]
+      then
+        samples_values+="${array[8]}"
+        samples_fields+=", owner_collection"
+     else
+        echo "Value "${array[8]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    else
+      echo "Owner-Collection is compulsory field"
+      abort_start
+    fi
+
+    # Column 10: Submitter-Sample
+    # Omit?
+    # Column 11: Submitter-Database
+    # Omit?
+
+    # Column 12: Location  (optional, set terms)
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-location
+    if [ -n "${array[11]}" ]
+      then
+      if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[11]}"'|') ]]
+      then
+        samples_values+="${array[11]}"
+        samples_fields+=", location"
+     else
+        echo "Value "${array[8]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    fi
+
+    # Column 13: AMR-Phenotype
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-amr_phenotype
+    if [ -n "${array[12]}" ]
+    then
+      unset  amr
+      IFS=',' read -r -a amr <<<"${array[12]}" 
+      for term in "${amr[@]}"
+      do
+        term=$(echo "${term}" | awk '{gsub(/^ +| +$/,"")} {print $0 }')
+        if  [[ ! $(echo ${allowed[@]} | fgrep -w '|'"${term}"'|') ]]
+        then
+          echo "Value "${term}" not in list of allowed terms. Aborting."
+          abort_start
+        fi
+      done
+      samples_values+="${array[12]}"
+      samples_fields+=", amr_phenotype"
+    else
+      echo "Value "${array[8]}" not in list of allowed terms. Aborting."
+      abort_start
+    fi
+
+    # Columd 14: Additional-Information (optional)
+    if [ -n "${array[13]}" ]
+    then
+      samples_values+="${array[13]}"
+      samples_fields+=", additonal_information"
+    fi
+
+    # Fields going to table reads
+    reads_values=()
+    reads_fields=""
+
+    # Colums  15-16: Read files
+    if [ -n "${array[14]}" ]
+    then
+      if test -f "${array[14]}"
+      then
+        echo "Calculating md5sum for ${array[14]}"
+        file1_md5=$(md5sum ${array[$t]} |  cut -d" " -f 1)
+        # Check if exists
+        file_id=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT read_id FROM reads WHERE filename='${array[14]}' AND md5='$read_md5';") 
+        if [ ${#file_id} -eq 0 ]
+        then
+          echo "Adding read ${array[$14]} to DB"
+          reads_values+="${array[14]}"
+          reads_values+=${file1_md}
+          samples_fields+="file1_filename, file1_md5"
+        else
+          echo "Read ${array[$14]} already exists with matching MD5"
+        fi
+      else
+        echo "File ${array[$14]} not found. Aborting"
+        abort_start
+      fi
+    fi
+    if [ -n "${array[15]}" ]
+    then
+      if test -f "${array[15]}"
+      then
+        echo "Calculating md5sum for ${array[15]}"
+        file1_md5=$(md5sum ${array[15]} |  cut -d" " -f 1)
+        # Check if exists
+        file_id=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT read_id FROM reads WHERE filename='${array[15]}' AND md$
+        if [ ${#file_id} -eq 0 ]
+        then
+          echo "Adding read ${array[$15]} to DB"
+          reads_values+="${array[15]}"
+          reads_values+=${file1_md}
+          samples_fields+="file2_filename, file2_md5"
+        else
+          echo "Read ${array[$t]} already exists with matching MD5"
+        fi
+      else
+        echo "File ${array[$15]} not found. Aborting"
+        abort_start
+      fi
+    fi
+
+    # Column 17: Accession (Optional)
+    if [ -n "${array[16]}" ]
+    then
+      read_values+="${array[16]}"
+      reads_fields+=", accession"
+    fi
+
+    # Column 18: Instrument (optional, set terms)
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-instrument
+    if [ -n "${array[17]}" ]
+    then
+      if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[17]}"'|') ]]
+      then
+        reads_values+="${array[17]}"
+        reads_fields+=", instrument"
+      else
+        echo "Value "${array[17]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    fi
+
+    # Column 19: Library
+    unset allowed
+    while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-library
+    if [ -n "${array[18]}" ]
+    then
+      if [[ $(echo ${allowed[@]} | fgrep -w '|'"${array[18]}"'|') ]]
+      then
+        reads_values+="${array[18]}"
+        reads_fields+=", library"
+      else
+        echo "Value "${array[18]}" not in list of allowed terms. Aborting."
+        abort_start
+      fi
+    fi
+
+    # Column 20: Library-Other
+    if [ -n "${array[19]}" ]
+    then
+      read_values+="${array[19]}"
+      reads_fields+=", library_other"
+    fi
+
+    # Add into DB
+    if ["$metada" = true ]
+    then
+      sample_id=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "INSERT INTO samples ${samples_fields} VALUES ${samples_values} RETURNING sample_id;" | head -1 | sed -e 's/^[ \t]*//')
+      echo "Adding sample_id: "$sample_id
+      run_id(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "INSERT INTO samples (${samples_fields}) VALUES ${reads_values}  RETURNING read_id;" | head -1 | sed -e 's/^[ \t]*//')
+      echo "Adding runs_id:"$runs_id"
+    fi
+  fi
+
+}
+
+# Check if current user has been added to DB
+userid=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT user_id FROM users WHERE username='$USER';")
 if [ ${#userid} -eq 0 ]; then
-  >&2 echo "Unknown user. First add user to the DB."
+  echo "Unknown user. First add user to the DB."
   exit
 fi
 
 # Read metadata file
-# Clear windows-style newlines
-dos2unix "$file" 2> /dev/null
-# Omit header if present
-grep -v "#" "$file" > "${file}".tmp
+#
 
-# Prepare input for pipeline
-if [ "$pipeline" = "true" ]
+# Set tmp file name
+file=".${USER}.$(date +%F_%H.%M.%S).tmp"
+
+# Check if excel file and convert if necessary
+if [[ $(file -b --mime-type "${rawfile}") == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'* ]];
 then
-  echo "sample_species;sample_name;user_name;user_group;run_id;read_1;read_2;reports" > "${file}"_input.tmp
+  xlsx2csv ${rawfile} > ${file}.1
+else
+  # Clear windows-style newlines
+  dos2unix "${rawfile}" 2> /dev/null
+  cp ${rawfile} ${file}.1
 fi
+
+# Omit header if present
+grep -v "#" "${file}.1" > ${file}
+
 
 # Read file line by line
 while IFS= read -r line
@@ -95,391 +398,55 @@ do
   IFS=";" read -a array <<< $line
 
   # check if sample_id already exists
-  sample_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT sample_id FROM samples WHERE primary_identifier ILIKE '${array[1]}';")
-  if [ ${#sample_id} -ne 0 ]
+  sample_id=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT sample_id FROM samples WHERE primary_identifier ILIKE '${array[1]}';" |sed -e 's/^[ \t]*//')
+  if [ ${#sample_id} -ne 0 ];
   then
-    sample_exists=true
     # Sample already in DB. Proceed to re-run?
-    primary_identifier=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT primary_identifier FROM samples WHERE sample_id = '${sample_id}';")
-    active_run_count=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT COUNT(1) FROM runs WHERE sample_id = '${sample_id}' AND active = 'true';")
-    >&2 echo "Sample "${primary_identifier}" with "${active_run_count}" active runs already in database"
-    if [ "$duplicate" = "false" ]
-    then      
-      >&2 echo "If you want to proceed, re-run with option -d set."
-      abort_start
-    else
-      >&2 echo "Option -d selected. Continuing"
-    fi
-  fi    
- 
-  # Sample not yet in DB or duplicate run allowed. Add sample metadata
-  samples_values=()
-
-  # Fields going to table samples
-  #
-  # Column 1: pipeline species (compulsory, set terms)
-  c=0
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-pipeline_species
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      samples_values+=("'${array[$c]}'")
-      samples_fields="pipeline_species"
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Pipeline-Species. Aborting."
-      abort_start
-    fi
+    primary_identifier=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT primary_identifier FROM samples WHERE sample_id = '${sample_id}';" | sed -e 's/^[ \t]*//')
+    active_run_count=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "SELECT COUNT(1) FROM runs WHERE sample_id = '${sample_id}' AND active = 'true';")
+    echo "Sample "${primary_identifier}" with "${active_run_count}" active runs already in database"
+    while true; do
+      if ![duplicate];
+        then
+          echo "If you want to proceed run again with option -d (Duplicate).""  
+          abort_start;;
+        else
+          echo "Option -d selected. Proceeding."  
+      endif
   else
-    >&2 echo "Pipeline-Species is compulsory field"
-    abort_start
-  fi
 
-  # Column 2: primary_identifier (compulsory)
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
+#XXX
+  # Only run pipeline if option -r is selected.
+  if [ "$pipeline" = true ]
   then
-    samples_values+=("'${array[$c]}'")
-    samples_fields+=", primary_identifier"
-  else
-    >&2 echo "Primary-Identifier is compulsory field"
-    abort_start
-  fi
-
-  # Column 3:  RYMY-ID (optional)
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    samples_values+=("'RYMY-ID'")
-    samples_values+=("'${array[$c]}'")
-    samples_fields+=", case_id_type, case_id_number"
-  fi
-
-  # Column 4: Food_bug (optional)
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    samples_values+=("'Food_bug'")
-    samples_values+=("'${array[$c]}'")
-    samples_fields+=", casse_id_type, case_id_number"
-  fi
-
-  # Column 5: Source (compulsory, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-source
-  if [ -n "${array[$c]}" ]
-  then
-    sourceterm=$( echo "${array[$c]}" | tr -d '[:blank:]')
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${sourceterm}"'|') ]]
-    then
-      unset source
-      IFS=',' read -r -a source <<<"${sourceterm}"
-      samples_values+=("'${source[0]}'")
-      samples_fields+=", source_category"
-      if [ -n "${source[1]}" ]
-      then
-        samples_values+=("'${source[1]}'")
-        samples_fields+=", source_species"
-      fi
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Source. Aborting."
-      abort_start
-    fi
-  else
-    >&2 echo "Source is compulsory field"
-    abort_start
-  fi
-
-  # Column 6: Sampling reason (optional, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-sampling_reason
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      samples_values+=("'${array[$c]}'")
-      samples_fields+=", sampling_reason"
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Sampling-Reason. Aborting."
-      abort_start
-    fi
-  fi
-
-  # Columns 7-8: Sampling-Date, Sample-Received-Date (conditionally optional)
-  c=$((c+1))
-  c2=$((c+1))
-  if [[ -n "${array[$c]}"  ||  -n "${array[$c2]}" ]]
-  then
-    if [ -n "${array[$c]}" ]
-    then
-      unset date
-      IFS='-' read -r -a date <<<"${array[$c]}"
-      samples_values+=("'${date[0]}'")
-      samples_values+=("'${date[1]}'")
-      samples_values+=("'${date[2]}'")
-      samples_fields+=", sampling_date_year, sampling_date_month, sampling_date_day"
-    fi
-    if [ -n "${array[$c2]}" ]
-    then
-      unset date
-      IFS='-' read -r -a date <<<"${array[$c]}"
-      samples_values+=("'${date[0]}'")
-      samples_values+=("'${date[1]}'")
-      samples_values+=("'${date[2]}'")
-      samples_fields+=", sample_received_date_year, sample_received_date_month, sample_received_date_day"
-    fi
-  else
-    >&2 echo "Either Sampling-Date or Sample-Received-Date must be defined"
-    abort_start
-  fi
-  c=$((c+1))
-
-  # Column 9: Owner-Collection (compulsory, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-owner_collection
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      IFS=',' read -r -a owner <<<"${array[$c]}" 
-      samples_values+=("'${owner[0]}'")
-      samples_fields+=", owner_institute"
-      if [ -n "${owner[1]}" ]
-      then
-        samples_values+=("'${owner[1]}'")
-        samples_fields+=", owner_collection"
-      fi
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Owner-Collection. Aborting."
-      abort_start
-    fi
-  else
-    >&2 echo "Owner-Collection is compulsory field"
-    abort_start
-  fi
-
-  # Column 10: Submitter-Sample
-  # Omit?
-  #c=$((c+1))
-  # Column 11: Submitter-Database
-  # Omit?
-  #c=$((c+1))
-
-  # Column 12: Location (optional, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-location
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      samples_values+=("'${array[$c]}'")
-      samples_fields+=", location"
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Location. Aborting."
-       abort_start
-    fi
-  fi
-
-  # Column 13: AMR-Phenotype (optional, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-amr_phenotype
-  if [ -n "${array[$c]}" ]
-  then
-    unset  amr
-    IFS=',' read -r -a amr <<<"${array[$c]}" 
-    for term in "${amr[@]}"
-    do
-      term=$( echo "${term}" | awk '{gsub(/^ +| +$/,"")} {print $0 }')
-      if  [[ ! $( echo ${allowed[@]} | fgrep -w '|'"${term}"'|') ]]
-      then
-        >&2 echo "Value "${term}" not in list of allowed terms for AMR-Phenotype. Aborting."
-        abort_start
-      fi
-    done     
-    samples_values+=("'${array[$c]}'")
-    samples_fields+=", amr_phenotype"  
-  fi
-
-  # Columd 14: Additional-Information (optional)
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    samples_values+=("'${array[$c]}'")
-    samples_fields+=", additional_information"
-  fi
-
-  # Fields going to table reads
-  reads_values=()
-  reads_fields=""
-
-  # Colums  15-16: Read files
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    if [ -f "${array[$c]}" ]
-    then
-      file1_name=$(basename ${array[$c]})      
-      file1_md5=$(md5sum ${array[$c]} |  cut -d" " -f 1)
-      # Check if exists
-      file1_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT read_id FROM reads WHERE file1_filename='${array[$c]}' AND file1_md5='$file1_md5';") 
-      if [ ${#file1_id} -eq 0 ]
-      then        
-        reads_values+=("'${file1_name}'")
-        reads_values+=("'${file1_md5}'")
-        reads_fields+="file1_filename, file1_md5"
-      else
-        >&2 echo "Read ${file1_name} already exists with matching MD5"
-        read_exists=true
-      fi
-    else
-      >&2 echo "File ${file1_name} not found. Aborting"
-      abort_start
-    fi
-  fi
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    if [ -f "${array[$c]}" ]
-    then
-      file2_name=$(basename ${array[$c]})
-      file2_md5=$(md5sum ${array[$c]} |  cut -d" " -f 1)
-      # Check if exists
-      file2_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "SELECT read_id FROM reads WHERE file2_filename='${array[$c]}' AND file2_md5='$file2_md5';") 
-      if [ ${#file2_id} -eq 0 ]
-      then        
-        reads_values+=("'${file2_name}'")
-        reads_values+=("'${file2_md5}'")
-        reads_fields+=", file2_filename, file2_md5"
-      else
-        >&2 echo "Read ${file2_name} already exists with matching MD5"
-      fi
-    else
-      >&2 echo "File ${file2_name} not found. Aborting"
-      abort_start
-    fi
-  fi
-
-  # Column 17: Accession (Optional)
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    read_values+=("'${array[$c]}'")
-    reads_fields+=", accession"
-  fi
-
-  # Column 18: Instrument (optional, set terms)
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-instrument
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      reads_values+=("'${array[$c]}'")
-      reads_fields+=", instrument"
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Instrument. Aborting."
-      abort_start
-    fi
-  fi
-
-  # Column 19: Library
-  c=$((c+1))
-  unset allowed
-  while read terms;do allowed+=('|'${terms}'|'); done < $ALLOWED/allowed-library
-  if [ -n "${array[$c]}" ]
-  then
-    if [[ $( echo ${allowed[@]} | fgrep -w '|'"${array[$c]}"'|') ]]
-    then
-      reads_values+=("'${array[$c]}'")
-      reads_fields+=", library"
-    else
-      >&2 echo "Value "${array[$c]}" not in list of allowed terms for Library. Aborting."
-      abort_start
-    fi
-  fi
-
-  # Column 20: Library-Other
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    read_values+=("'${array[$c]}'")
-    reads_fields+=", library_other"
-  fi
-
-  # Column 21: Write reports (If omitted, assume "n". )
-  c=$((c+1))
-  if [ -n "${array[$c]}" ]
-  then
-    write_reports="${array[$c]}"
-  else
-    write_reports="n"
-  fi
-
-  # Add into DB
-  if [ "$metadata" = "true" ]
-  then
-    # Add samples metadata if not already in DB
-    if [ "$sample_exists" = "true" ]
-    then
-      >&2 echo "Sample already exists (sample_id: ${sample_id}). No changes to DB"
-    else
-      samples_values_string=$(IFS=',';echo "${samples_values[*]}";IFS=$' \t\n') 
-      sample_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "INSERT INTO samples (${samples_fields}) VALUES (${samples_values_string}) RETURNING sample_id;")
-      >&2 echo "Adding sample_id: "$sample_id
-    fi
-    # Add reads metadata if not already in DB
-    if [ "$read_exists" = "true" ]
-    then
-      >&2 echo "Read already exists (read_id: ${file1_id}). No changes to DB"
-    else
-      reads_values_string=$(IFS=','; echo "${reads_values[*]}";IFS=$' \t\n') 
-      read_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "INSERT INTO reads (${reads_fields}) VALUES (${reads_values_string})  RETURNING read_id;")
-      >&2 echo "Adding read_id: "$read_id
-    fi
-  fi
-
-  # Only add to pipeline pipeline if option -p is selected.
-  if [ "$pipeline" = "true" ]
-  then
+    # Generate run_id
     # Add run to DB to get run_id
-    run_id=$(PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -AXqtc "INSERT INTO runs (user_id, starttime) VALUES ('$userid', current_timestamp) RETURNING run_id;")   
-    >&2 echo "run_id: "$run_id
+run_id=$(PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "INSERT INTO runs (user_id, starttime) VALUES ('$userid', current_timest$
+>&2 echo "run_id: "$run_id
 
-    # Input for the run script
+
+  echo "sample_species;sample_name;user_name;user_group;run_id;read_1;read_2;reports"
+  # Read file line by line
+  while IFS= read -r line
+  do
+    # Read line into an array
+    IFS=";" read -a array <<< $line
     sample_species="${array[0]}"
     sample_name="${array[1]}"
     user_name=$USER
     user_group=$(groups |awk '{print $1}')
-    read_1="$(readlink -f ${file1_name})"
-    read_2="$(readlink -f ${file2_name})"
-    if [ "$reports" = "true" ]
-    then
-      write_reports="y"
+    read_1="$(readlink -f ${array[21]})"
+    read_2="$(readlink -f ${array[22]})"
+    #reports="${array[25]}"
+    if [ "$metadata" = true ]; then
+      reports="y"
+    else
+      reports="n"
     fi
-    echo "$sample_species;$sample_name;$user_name;$user_group;$run_id;$read_1;$read_2;$write_reports" >> "${file}"_input.tmp
-  fi
+    echo "$sample_species;$sample_name;$user_name;$user_group;$run_id;$read_1;$read_2;$reports"
+  done < ${run_id}.tmp
 
-done < "${file}".tmp
+fi
 
-# Run pipeline if option -r is selected.
-if [ "$pipeline" = "true" ]
-then
-  if [ -e "${file}"_input.tmp ];
-  then
-    echo " File exists."
-    echo "Starting to run pipeline..."
-    cat "${file}"_input.tmp
-    pipeline_launcher  "${file}"_input.tmp
-  else
-    echo "input file does not exist for pipeline."
-  fi
-fi  
-
+done < ${run_id}.tmp
 

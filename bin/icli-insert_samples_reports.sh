@@ -26,7 +26,7 @@ do
 done < $1.tmp
 
 # Add to DB
-PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -t -c "COPY samples_report FROM STDIN  DELIMITER E'	' CSV HEADER;" < report-tmp.csv
+PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "COPY samples_report FROM STDIN  DELIMITER E'	' CSV HEADER;" < report-tmp.csv
 
 # Clean the tmp files
 rm report-tmp.csv

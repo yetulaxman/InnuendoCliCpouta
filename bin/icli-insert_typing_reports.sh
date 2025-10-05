@@ -11,16 +11,18 @@ dbuser=$DBUSER
 dbpassword=$DBPASSWORD
 
 # Remove header
-tail -n +2 $1 > $1.tmp.1
+tail -n +2 $1 > $1.tmp
 
 # Select fields
-cut -f 1-20 $1.tmp.1 > $1.tmp
+#cut -f 1-20 $1.tmp.1 > $1.tmp
 
 # Remove linefeeds from data fields
-sed -i s/"\\\n"// $2.tmp
+sed -i s/"\\\n"// $1.tmp
 
 # Make sure tmp file is empty
 echo "" > report-tmp.csv
+
+run_date=$(date -r $1 "+%F %H:%M:%S %:z")
 
 # Add run_date and active to each line
 while read -r "LINE"
@@ -29,7 +31,7 @@ do
 done < $1.tmp
 
 # Add to DB
-PGPASSWORD=$dbpassword psql -U 'dbuser' -d 'i2' -t -c "COPY typing_report FROM STDIN  DELIMITER E'	' CSV HEADER;" < report-tmp.csv
+PGPASSWORD=$dbpassword psql -U $DBUSER -d 'i2' -t -c "COPY typing_report FROM STDIN  DELIMITER E'	' CSV HEADER;" < report-tmp.csv
 
 # Clean the tmp files
 rm report-tmp.csv
