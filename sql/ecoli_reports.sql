@@ -323,6 +323,14 @@ CREATE TABLE amr_report_ecoli(
   "H_type_serotypefinder" TEXT,
   "O_type_serotypefinder_long" TEXT,
   "H_type_serotypefinder_long" TEXT,
-  "Min_coverage_virulencefinder" TEXT,
-  "Min_threshold_identity_virulencefinder" TEXT
  );
+
+CREATE TABLE virulencefinder_ecoli(
+  run_date TIMESTAMP,
+  active BOOLEAN,
+  primary_identifier VARCHAR(255),
+  min_coverage_virulencefinder DECIMAL(4,2),
+  min_threshold_identity_virulencefinder DECIMAL(4,2),
+  virulencefinder_name VARCHAR(255),
+  virulencefinder_comment VARCHAR(255)
+);
