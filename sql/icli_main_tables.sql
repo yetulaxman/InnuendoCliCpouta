@@ -36,7 +36,7 @@ CREATE TABLE samples(
   sample_id SERIAL PRIMARY KEY,
   pipeline_species VARCHAR(255) NOT NULL,
   primary_identifier VARCHAR(255) UNIQUE NOT NULL,
-  case_id_type VARCHAR(255) NOT NULL,
+  case_id_type VARCHAR(255),
   case_id_number INT,
   source_category VARCHAR(255) NOT NULL,
   source_species VARCHAR(255),
