@@ -317,12 +317,12 @@ CREATE TABLE amr_report_ecoli(
   "pathotype_genes_present" TEXT,
   "serotypefinder_software_version" TEXT,
   "serotypefinder_database_version" TEXT,
-  "id_threshold_percentage_serotypefinder" TEXT,
-  "min_length_threshold_percentage_serotypefinder" TEXT,
+  "id_threshold_percentage_serotypefinder" DECIMAL(4,2),
+  "min_length_threshold_percentage_serotypefinder" DECIMAL(4,2),
   "O_type_serotypefinder" TEXT,
   "H_type_serotypefinder" TEXT,
   "O_type_serotypefinder_long" TEXT,
-  "H_type_serotypefinder_long" TEXT,
+  "H_type_serotypefinder_long" TEXT
  );
 
 CREATE TABLE virulencefinder_ecoli(
