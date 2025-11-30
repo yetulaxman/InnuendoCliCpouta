@@ -115,21 +115,32 @@ For better organization, create a subfolder corresponding to each batch of sampl
    Please note that the excel file, Innuendo_reports.xlsx also comprises all reports, each one in a separate excel sheet.
 
  - ### **Visualising ChewBBACA allelic profiles using Grapetree**
-   Grapetree software (version 2.2.0) is installed on InnuendoCLI machine and can be used for the visualization of allelic profiles.  You can use the
-   following command on linux terminal to launch GrapeTree: 
+   
+  Grapetree software (version 2.2.0) is installed on InnuendoCLI machine and can be used for the visualization of allelic profiles.  You can use the following command on linux terminal to launch GrapeTree: 
+   ```bash
+    > grapetree
+   ```
 
-    ```bash
-    grapetree
-    ```
-    Once the software is launched, you can access it from your web browser using the following URL: http://floating_ip:5000/. The floating_ip is shared 
-    seperately in e-mail.
+ You can ignore the graphical window that appears when you type “grapetree” command on the terminal (just  type q  and the y (for yes). After that you will be printed with internal URL(http://xxx.xxx.x.xx:5000/ ) which is **NOT** accessible outside pouty. So you have to always use the URL: http://floating_ip:5000/. The floating_ip is shared seperately in e-mail.
+
+grapetree needs an inpput data with whole genome MLST alleilic profiles as numerical data. The data obtained from ChewBBACA data analysis results (with file suffix: _wgMLST.tsv) text representation for missing values. The results folder can be located under the path results/chebbaca_alleleCall_13/… in the  analysis directory. Once you have located such file, you have to convert it to numerical data (instead of some text values) using the following command:
+
+  ```bash
+  chewBBACA.py ExtractCgMLST -i chewbbaca_allelecallFIAR-84722_S5_L001_wgMLST.tsv  -o results --t 0
+  
+ ```
+  Once above command is run successfully, there would be a file resulsts/cgMLST.tsv  which is the input for the *index_profiles*
 
    Since metadata is still being compiled for the in-house generated allelic profiles, only the raw samples can be visualized at this time. A search tool has been developed to find the nearest neighbors and retrieve their corresponding allelic profiles. To use this tool, you need to create a query file containing the allelic profile of a sample (see the example  file: indexquery in this GitHub repository), and then run the search for the sample’s nearest neighbors as shown below::
 
-    ```bash
-    index_profiles indexquery
-    ```
-    The command above will generate a file named indexquery_nearest_profiles.tsv, containing the nearest neighbors along with their allelic profiles. This file can be used to create tree visualizations using the GrapeTree software.
+
+ ```bash
+ 
+ index_profiles indexquery
+ 
+ ```
+The command above will generate a file named "indexquery_nearest_profiles.tsv", containing the nearest neighbors along with their allelic profiles. This file can be used to create tree visualizations using the GrapeTree software.
+
    
 ## Updating a module in InnuendoCLI platform
 
