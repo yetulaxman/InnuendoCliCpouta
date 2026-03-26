@@ -489,9 +489,10 @@ Updating a new software means usually updating the container image of the softwa
      kill <pid>
    ```
      
- **Q5: ChewBBACA error: EOFError: Ran out of input or Filenotfound error**
+ **Q5**: ChewBBACA error: EOFError: Ran out of input or Filenotfound error**
 
  **A5**: Ran out of disk space where ChewBBACA databases are stored
 
- **Q6: Innuendo indexing database is not getting updated despite transfering data to the desired species-specific input location (.../incoming/$spiecies) ?
- **A6** More likely, the indexing process is failed and there would be locking file that is not removed as indexing is not successful. Admin can remove the (.lock) file. The cron.log file at ../THL_RV/wgMLST_indexing/ can give detailed log on the indexing.
+ **Q6**: Innuendo indexing database is not getting updated despite transfering data to the desired species-specific input location (.../incoming/$spiecies) ?
+ 
+ **A6** More likely, the indexing process is failed and there would be locking file (.lock file )that is not removed as indexing is not successful. Admins can remove the (.lock) file. The cron.log file at ../THL_RV/wgMLST_indexing/ can give detailed log on the indexing.
