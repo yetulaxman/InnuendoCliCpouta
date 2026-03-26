@@ -123,7 +123,7 @@ For better organization, create a subfolder corresponding to each batch of sampl
 
  You can ignore the graphical window that appears when you type “grapetree” command on the terminal (just  type q  and the y (for yes). After that you will be printed with internal URL(http://xxx.xxx.x.xx:5000/ ) which is **NOT** accessible outside pouty. So you have to always use the URL: http://floating_ip:5000/. The floating_ip is shared seperately in e-mail.
 
-grapetree needs an inpput data with whole genome MLST alleilic profiles as numerical data. The data obtained from ChewBBACA data analysis results (with file suffix: _wgMLST.tsv) text representation for missing values. The results folder can be located under the path results/chebbaca_alleleCall_13/… in the  analysis directory. Once you have located such file, you have to convert it to numerical data (instead of some text values) using the following command:
+grapetree needs an input data with whole genome MLST alleilic profiles as numerical data. The data obtained from ChewBBACA data analysis results (with file suffix: _wgMLST.tsv) text representation for missing values. The results folder can be located under the path results/chebbaca_alleleCall_13/… in the  analysis directory. Once you have located such file, you have to convert it to numerical data (instead of some text values) using the following command:
 
   ```bash
   chewBBACA.py ExtractCgMLST -i chewbbaca_allelecallFIAR-84722_S5_L001_wgMLST.tsv  -o results --t 0
@@ -136,10 +136,10 @@ grapetree needs an inpput data with whole genome MLST alleilic profiles as numer
 
  ```bash
  
- index_profiles indexquery
+ index_profiles_species indexquery species_name    # e.g., index_profiles_species indexquery "ecoli"  for e-cloi
  
  ```
-The command above will generate a file named "indexquery_nearest_profiles.tsv", containing the nearest neighbors along with their allelic profiles. This file can be used to create tree visualizations using the GrapeTree software.
+The command above will generate a file named "indexquery_nearest_profiles.tsv", containing the nearest neighbors along with their allelic profiles. This file can be used to create tree visualizations using the GrapeTree software. Possible options for species names are campy, ecoli, listeria,  salmonella and yersinia
 
    
 ## Updating a module in InnuendoCLI platform
@@ -456,9 +456,9 @@ Updating a new software means usually updating the container image of the softwa
   ```
   
    Above error is as a consequnce of not using quotes when giving path to input files. Make sure to use quotes ('') to fastq sample path as below:
-   nextflow run pipeline_ecoli.nf --fastq '/mnt/rv_data/lyetukur/jobs/33/data/*_{1,2}.fastq.gz' ....
+   nextflow run pipeline_ecoli.nf --fastq '/mnt/rv_data/lyetukur/jobs/33/data/*_{1,2}.fastq.gz'...
 
- **Please note** that this isssue is only when one tries to run nextflow pipeline manually. When pipelines are launched with *icli-run*, you will **NOT**
+  **Please note** that this isssue is only when one tries to run nextflow pipeline manually. When pipelines are launched with *icli-run*, you will **NOT**
    come across this issue.
 
 
@@ -492,3 +492,6 @@ Updating a new software means usually updating the container image of the softwa
  **Q5: ChewBBACA error: EOFError: Ran out of input or Filenotfound error**
 
  **A5**: Ran out of disk space where ChewBBACA databases are stored
+
+ **Q6: Innuendo indexing database is not getting updated despite transfering data to the desired species-specific input location (.../incoming/$spiecies) ?
+ **A6** More likely, the indexing process is failed and there would be locking file that is not removed as indexing is not successful. Admin can remove the (.lock) file. The cron.log file at ../THL_RV/wgMLST_indexing/ can give detailed log on the indexing.
