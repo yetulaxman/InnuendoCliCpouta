@@ -113,7 +113,26 @@ For better organization, create a subfolder corresponding to each batch of sampl
    - typing_reports.tab
 
    Please note that the excel file, Innuendo_reports.xlsx also comprises all reports, each one in a separate excel sheet.
+ 
+ - ### **Verifying Successful Indexing**
 
+  You can verify whether a sample has been successfully indexed by searching for it in the indexed database using `grep`. If the sample   is indexed, the command will return a “matches” result.
+
+  You can for example perfom the `grep` command as shown below:
+  ```bash
+  grep "sample name" /mnt/THL_RV/wgMLST_indexing/production/$species.ids # e.g., grep P01-D10-HPBA-2599 /mnt/THL_RV/wgMLST_indexing/  production/ecoli.ids
+  ```
+  A successful indexing should produce output similar to:
+
+  ```
+  Binary file /mnt/THL_RV/wgMLST_indexing/production/ecoli.ids matches
+  ```
+  For more detailed information about the indexing process, you can also check the log file:
+  ```
+  /mnt/THL_RV/wgMLST_indexing/cron.log
+  ```
+  This log contains detailed records of the indexing steps for your samples.
+  
  - ### **Visualising ChewBBACA allelic profiles using Grapetree**
    
   Grapetree software (version 2.2.0) is installed on InnuendoCLI machine and can be used for the visualization of allelic profiles.  You can use the following command on linux terminal to launch GrapeTree: 
