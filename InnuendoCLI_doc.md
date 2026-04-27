@@ -148,17 +148,23 @@ grapetree needs an input data with whole genome MLST alleilic profiles as numeri
   chewBBACA.py ExtractCgMLST -i chewbbaca_allelecallFIAR-84722_S5_L001_wgMLST.tsv  -o results --t 0
   
  ```
-  Once above command is run successfully, there would be a file resulsts/cgMLST.tsv  which is the input for the *index_profiles*
+  Once above command is run successfully, there would be a file resulsts/cgMLST.tsv  which is the input for the *index_profiles_species*
 
-   Since metadata is still being compiled for the in-house generated allelic profiles, only the raw samples can be visualized at this time. A search tool has been developed to find the nearest neighbors and retrieve their corresponding allelic profiles. To use this tool, you need to create a query file containing the allelic profile of a sample (see the example  file: indexquery in this GitHub repository), and then run the search for the sample’s nearest neighbors as shown below::
-
+ A search tool has been developed to find the nearest neighbors and retrieve their corresponding allelic profiles. To use this tool, you need to create a query file containing the allelic profile of a sample (see the example  file: indexquery in this GitHub repository), and then run the search for the sample’s nearest neighbors as shown below::
 
  ```bash
- 
- index_profiles_species indexquery species_name    # e.g., index_profiles_species indexquery "ecoli"  for e-cloi
- 
+>index_profiles_species -f profile_inputdata_file -s species_name -q Q_errors_allowed_in_fastmlst_tool
+
+Options:
+  -f FILE     Input file (required)
+  -s STRING   Species name (required)
+  -q INT      Max allowed errors (default:50)
+  -h          Show this help message and exit
+
+Example:
+  index_profiles_species -f inputdata.tsv -s "ecoli" -q 100
  ```
-The command above will generate a file named "indexquery_nearest_profiles.tsv", containing the nearest neighbors along with their allelic profiles. This file can be used to create tree visualizations using the GrapeTree software. Possible options for species names are campy, ecoli, listeria,  salmonella and yersinia
+The command above will generate a file named "indexquery_nearest_profiles.tsv", containing the nearest neighbors along with their allelic profiles. For e-coli samples metadata input is also generated. For other species, metadata needed for the tool are being compilied. This file can be used to create tree visualizations using the GrapeTree software. Possible options for species names are campy, ecoli, listeria,  salmonella and yersinia
 
    
 ## Updating a module in InnuendoCLI platform
